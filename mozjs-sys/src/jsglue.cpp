@@ -174,6 +174,57 @@ class RustJobQueue : public JS::JobQueue {
   }
 };
 
+struct PromiseLifecycleTraps {
+  void (*onNewPromise)(const void* state, JSContext* cx,
+                       JS::HandleObject promise);
+
+  void (*onBeforePromiseReaction)(const void* state, JSContext* cx,
+                                  JS::HandleObject promise);
+
+  void (*onAfterPromiseReaction)(const void* state, JSContext* cx,
+                                 JS::HandleObject promise);
+
+  void (*onPromiseSettled)(const void* state, JSContext* cx,
+                           JS::HandleObject promise);
+};
+
+class RustPromiseLifecycleCallbacks : public JS::PromiseLifecycleCallbacks {
+  PromiseLifecycleTraps mTraps;
+
+  const void* mState;
+
+ public:
+  RustPromiseLifecycleCallbacks(const PromiseLifecycleTraps& aTraps,
+                                const void* aState)
+
+      : mTraps(aTraps), mState(aState) {}
+
+  virtual void onNewPromise(JSContext* cx, JS::HandleObject promise) {
+    if (mTraps.onNewPromise) {
+      mTraps.onNewPromise(mState, cx, promise);
+    }
+  }
+
+  virtual void onBeforePromiseReaction(JSContext* cx,
+                                       JS::HandleObject promise) {
+    if (mTraps.onBeforePromiseReaction) {
+      mTraps.onBeforePromiseReaction(mState, cx, promise);
+    }
+  }
+
+  virtual void onAfterPromiseReaction(JSContext* cx, JS::HandleObject promise) {
+    if (mTraps.onAfterPromiseReaction) {
+      mTraps.onAfterPromiseReaction(mState, cx, promise);
+    }
+  }
+
+  virtual void onPromiseSettled(JSContext* cx, JS::HandleObject promise) {
+    if (mTraps.onPromiseSettled) {
+      mTraps.onPromiseSettled(mState, cx, promise);
+    }
+  }
+};
+
 struct JSExternalStringCallbacksTraps {
   void (*latin1Finalize)(const void* privateData, JS::Latin1Char* chars);
   void (*utf16Finalize)(const void* privateData, char16_t* chars);
@@ -1119,6 +1170,15 @@ JS::JobQueue* CreateJobQueue(const JobQueueTraps* aTraps, const void* aQueue,
 }
 
 void DeleteJobQueue(JS::JobQueue* queue) { delete queue; }
+
+JS::PromiseLifecycleCallbacks* CreatePromiseLifecycleCallbacks(
+    const PromiseLifecycleTraps* aTraps, const void* aState) {
+  return new RustPromiseLifecycleCallbacks(*aTraps, aState);
+}
+
+void DeletePromiseLifecycleCallbacks(JS::PromiseLifecycleCallbacks* callbacks) {
+  delete callbacks;
+}
 
 JSExternalStringCallbacks* CreateJSExternalStringCallbacks(
     const JSExternalStringCallbacksTraps* aTraps, void* privateData) {

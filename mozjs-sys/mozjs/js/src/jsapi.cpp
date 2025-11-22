@@ -10,30 +10,28 @@
 
 #include "jsapi.h"
 
+#include <algorithm>
+#include <cstdarg>
+
 #include "mozilla/FloatingPoint.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/PodOperations.h"
 #include "mozilla/Sprintf.h"
-
-#include <algorithm>
-#include <cstdarg>
 #ifdef __linux__
 #  include <dlfcn.h>
 #endif
-#include <iterator>
 #include <stdarg.h>
 #include <string.h>
 
-#include "jsexn.h"
-#include "jsfriendapi.h"
-#include "jsmath.h"
-#include "jstypes.h"
+#include <iterator>
 
 #include "builtin/AtomicsObject.h"
 #include "builtin/Eval.h"
 #include "builtin/JSON.h"
+#include "builtin/Promise-inl.h"
 #include "builtin/Promise.h"
 #include "builtin/Symbol.h"
+#include "debugger/DebugAPI-inl.h"
 #include "frontend/FrontendContext.h"  // AutoReportFrontendContext
 #include "gc/GC.h"
 #include "gc/GCContext.h"
@@ -49,10 +47,7 @@
 #include "js/Conversions.h"
 #include "js/Date.h"  // JS::GetReduceMicrosecondTimePrecisionCallback
 #include "js/ErrorInterceptor.h"
-#include "js/ErrorReport.h"           // JSErrorBase
-#include "js/experimental/JitInfo.h"  // JSJitInfo
-#include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
-#include "js/friend/StackLimits.h"    // js::AutoCheckRecursionLimit
+#include "js/ErrorReport.h"  // JSErrorBase
 #include "js/GlobalObject.h"
 #include "js/Initialization.h"
 #include "js/Interrupt.h"
@@ -75,27 +70,43 @@
 #include "js/WasmModule.h"
 #include "js/Wrapper.h"
 #include "js/WrapperCallbacks.h"
+#include "js/experimental/JitInfo.h"  // JSJitInfo
+#include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
+#include "js/friend/StackLimits.h"    // js::AutoCheckRecursionLimit
+#include "jsexn.h"
+#include "jsfriendapi.h"
+#include "jsmath.h"
+#include "jstypes.h"
 #include "proxy/DOMProxy.h"
 #include "util/Identifier.h"  // IsIdentifier
 #include "util/StringBuilder.h"
 #include "util/Text.h"
 #include "vm/BoundFunctionObject.h"
+#include "vm/Compartment-inl.h"
 #include "vm/EnvironmentObject.h"
 #include "vm/ErrorObject.h"
 #include "vm/ErrorReporting.h"
 #include "vm/FunctionPrefixKind.h"
+#include "vm/Interpreter-inl.h"
 #include "vm/Interpreter.h"
+#include "vm/IsGivenTypeObject-inl.h"  // js::IsGivenTypeObject
 #include "vm/JSAtomState.h"
+#include "vm/JSAtomUtils-inl.h"  // AtomToId, PrimitiveValueToId, IndexToId, ClassName
 #include "vm/JSAtomUtils.h"  // Atomize, AtomizeWithoutActiveZone, AtomizeChars, PinAtom, ClassName
 #include "vm/JSContext.h"
+#include "vm/JSFunction-inl.h"
 #include "vm/JSFunction.h"
 #include "vm/JSObject.h"
+#include "vm/JSScript-inl.h"
 #include "vm/JSScript.h"
 #include "vm/Logging.h"
+#include "vm/NativeObject-inl.h"
 #include "vm/PlainObject.h"    // js::PlainObject
 #include "vm/PromiseObject.h"  // js::PromiseObject
 #include "vm/Runtime.h"
+#include "vm/SavedStacks-inl.h"
 #include "vm/SavedStacks.h"
+#include "vm/StringType-inl.h"
 #include "vm/StringType.h"
 #include "vm/Time.h"
 #include "vm/ToSource.h"
@@ -103,18 +114,6 @@
 #include "vm/WrapperObject.h"
 #include "wasm/WasmModule.h"
 #include "wasm/WasmProcess.h"
-
-#include "builtin/Promise-inl.h"
-#include "debugger/DebugAPI-inl.h"
-#include "vm/Compartment-inl.h"
-#include "vm/Interpreter-inl.h"
-#include "vm/IsGivenTypeObject-inl.h"  // js::IsGivenTypeObject
-#include "vm/JSAtomUtils-inl.h"  // AtomToId, PrimitiveValueToId, IndexToId, ClassName
-#include "vm/JSFunction-inl.h"
-#include "vm/JSScript-inl.h"
-#include "vm/NativeObject-inl.h"
-#include "vm/SavedStacks-inl.h"
-#include "vm/StringType-inl.h"
 
 using namespace js;
 
@@ -1187,11 +1186,11 @@ JS_PUBLIC_API JSObject* JS::CurrentGlobalOrNull(JSContext* cx) {
   return cx->global();
 }
 
-JS_PUBLIC_API JSObject *const * JS::CurrentGlobal(JSContext* cx) {
+JS_PUBLIC_API JSObject* const* JS::CurrentGlobal(JSContext* cx) {
   AssertHeapIsIdleOrIterating();
   CHECK_THREAD(cx);
   MOZ_ASSERT(cx->realm());
-  return reinterpret_cast<JSObject *const *>(cx->global().address());
+  return reinterpret_cast<JSObject* const*>(cx->global().address());
 }
 
 JS_PUBLIC_API JSObject* JS::GetNonCCWObjectGlobal(JSObject* obj) {
@@ -2794,6 +2793,11 @@ JS_PUBLIC_API void JS_ResetInterruptCallback(JSContext* cx, bool enable) {
  */
 JS_PUBLIC_API void JS::SetJobQueue(JSContext* cx, JobQueue* queue) {
   cx->jobQueue = queue;
+}
+
+JS_PUBLIC_API void JS::SetPromiseLifecycleCallbacks(
+    JSContext* cx, PromiseLifecycleCallbacks* callbacks) {
+  cx->promiseLifecycleCallbacks = callbacks;
 }
 
 extern JS_PUBLIC_API void JS::SetPromiseRejectionTrackerCallback(

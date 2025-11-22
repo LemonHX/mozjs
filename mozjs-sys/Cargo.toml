@@ -16,6 +16,7 @@ name = "mozjs_sys"
 doctest = false
 
 [features]
+default = ["jit", "libz-sys", "intl"]
 debugmozjs = []
 profilemozjs = []
 jit = []

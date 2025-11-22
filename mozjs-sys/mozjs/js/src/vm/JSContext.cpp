@@ -8,17 +8,17 @@
  * JS execution context.
  */
 
-#include "vm/JSContext-inl.h"
+#include <string.h>
 
 #include "mozilla/CheckedInt.h"
 #include "mozilla/DebugOnly.h"
 #include "mozilla/MemoryReporting.h"
 #include "mozilla/Sprintf.h"
 #include "mozilla/Utf8.h"  // mozilla::ConvertUtf16ToUtf8
-
-#include <string.h>
+#include "vm/JSContext-inl.h"
 #ifdef ANDROID
 #  include <android/log.h>
+
 #  include <fstream>
 #  include <string>
 #endif  // ANDROID
@@ -26,11 +26,10 @@
 #  include <processthreadsapi.h>
 #endif  // XP_WIN
 
-#include "jsapi.h"  // JS_SetNativeStackQuota
+#include "builtin/RegExp.h"  // js::RegExpSearcherLastLimitSentinel
+#include "jsapi.h"           // JS_SetNativeStackQuota
 #include "jsexn.h"
 #include "jstypes.h"
-
-#include "builtin/RegExp.h"  // js::RegExpSearcherLastLimitSentinel
 #ifdef MOZ_EXECUTION_TRACING
 #  include "debugger/ExecutionTracer.h"
 #endif
@@ -41,15 +40,15 @@
 #include "jit/Simulator.h"
 #include "js/CallAndConstruct.h"  // JS::Call
 #include "js/CharacterEncoding.h"
-#include "js/ContextOptions.h"        // JS::ContextOptions
-#include "js/ErrorInterceptor.h"      // JSErrorInterceptor
-#include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
-#include "js/friend/StackLimits.h"    // js::ReportOverRecursed
+#include "js/ContextOptions.h"    // JS::ContextOptions
+#include "js/ErrorInterceptor.h"  // JSErrorInterceptor
 #include "js/MemoryCallbacks.h"
 #include "js/Prefs.h"
 #include "js/Printf.h"
 #include "js/PropertyAndElement.h"  // JS_GetProperty
 #include "js/Stack.h"  // JS::NativeStackSize, JS::NativeStackLimit, JS::NativeStackLimitMin
+#include "js/friend/ErrorMessages.h"  // js::GetErrorMessage, JSMSG_*
+#include "js/friend/StackLimits.h"    // js::ReportOverRecursed
 #include "util/DiagnosticAssertions.h"
 #include "util/DifferentialTesting.h"
 #include "util/DoubleToString.h"
@@ -57,6 +56,7 @@
 #include "util/Text.h"
 #include "util/WindowsWrapper.h"
 #include "vm/BytecodeUtil.h"  // JSDVG_IGNORE_STACK
+#include "vm/Compartment-inl.h"
 #include "vm/ErrorObject.h"
 #include "vm/ErrorReporting.h"
 #include "vm/FrameIter.h"
@@ -64,11 +64,9 @@
 #include "vm/JSObject.h"
 #include "vm/PlainObject.h"  // js::PlainObject
 #include "vm/Realm.h"
+#include "vm/Stack-inl.h"
 #include "vm/StringType.h"  // StringToNewUTF8CharsZ
 #include "vm/ToSource.h"    // js::ValueToSource
-
-#include "vm/Compartment-inl.h"
-#include "vm/Stack-inl.h"
 
 using namespace js;
 
@@ -1038,6 +1036,7 @@ JSContext::JSContext(JSRuntime* runtime, const JS::ContextOptions& options)
       jobQueue(this, nullptr),
       internalJobQueue(this),
       canSkipEnqueuingJobs(this, false),
+      promiseLifecycleCallbacks(this),
       promiseRejectionTrackerCallback(this, nullptr),
       promiseRejectionTrackerCallbackData(this, nullptr),
       insideExclusiveDebuggerOnEval(this, nullptr) {

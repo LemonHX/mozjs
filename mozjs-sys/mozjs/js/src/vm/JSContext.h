@@ -9,12 +9,6 @@
 #ifndef vm_JSContext_h
 #define vm_JSContext_h
 
-#include "mozilla/BaseProfilerUtils.h"  // BaseProfilerThreadId
-#include "mozilla/Maybe.h"
-#include "mozilla/MemoryReporting.h"
-
-#include "jstypes.h"  // JS_PUBLIC_API
-
 #include "builtin/AtomicsObject.h"
 #include "ds/TraceableFifo.h"
 #include "frontend/NameCollections.h"
@@ -30,6 +24,10 @@
 #include "js/Stack.h"  // JS::NativeStackBase, JS::NativeStackLimit
 #include "js/Utility.h"
 #include "js/Vector.h"
+#include "jstypes.h"                    // JS_PUBLIC_API
+#include "mozilla/BaseProfilerUtils.h"  // BaseProfilerThreadId
+#include "mozilla/Maybe.h"
+#include "mozilla/MemoryReporting.h"
 #include "threading/ProtectedData.h"
 #include "util/StructuredSpewer.h"
 #include "vm/Activation.h"  // js::Activation
@@ -917,6 +915,13 @@ struct JS_PUBLIC_API JSContext : public JS::RootingContext,
   // True if jobQueue is empty, or we are running the last job in the queue.
   // Such conditions permit optimizations around `await` expressions.
   js::ContextData<bool> canSkipEnqueuingJobs;
+
+  // Promise lifecycle callbacks, used to inform embedding code
+  // when a promise is created, etc.
+  //
+  // This is a non-owning pointer to an implementation the embedding
+  // provided by calling JS::SetPromiseLifecycleCallbacks. Can be null.
+  js::ContextData<JS::PromiseLifecycleCallbacks*> promiseLifecycleCallbacks;
 
   js::ContextData<JS::PromiseRejectionTrackerCallback>
       promiseRejectionTrackerCallback;
